@@ -1,0 +1,142 @@
+name: Deployment pipe
+on:
+  release:
+    types: [released]
+  push:
+    branches: ['main', 'feature/ci']
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: wapp-ot-web # set this to your application's name
+  AZURE_WEBAPP_PACKAGE_PATH: '.next/standalone' # set this to the path to your web app project, defaults to the repository root
+  NODE_VERSION: '20.x' # set this to the node version to use
+  IMAGE_NAME: ot-web
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: 'Development'
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 'Azure Login via OIDC'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: 'Login to ACR'
+        run: az acr login -n olavstoppendockerregistry
+
+      - name: 'Check that image exists in registry'
+        id: registry
+        run: |
+          if [ -n "$(docker images -q ${{ vars.AZURE_CR_URI }}/$IMAGE_NAME:${{ github.sha }})" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else 
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set short sha
+        id: git
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: 'Build docker image'
+        if: ${{ steps.registry.outputs.exists  == 'false' }}
+        run: |
+          docker build \
+            --build-arg VERSION=${{ github.event_name == 'release' && needs.get-version.outputs.version || steps.git.outputs.sha_short }} \
+            --build-arg NEXT_PUBLIC_SANITY_DATASET=${{ secrets.NEXT_PUBLIC_SANITY_DATASET }} \
+            --build-arg NEXT_PUBLIC_SANITY_PROJECT_ID=${{ secrets.NEXT_PUBLIC_SANITY_PROJECT_ID }} \
+            --build-arg SANITY_API_READ_TOKEN=${{ secrets.SANITY_API_READ_TOKEN }} \
+            . \
+            -t ${{ vars.AZURE_CR_URI }}/$IMAGE_NAME:${{ github.sha }} \
+            -t ${{ vars.AZURE_CR_URI }}/$IMAGE_NAME:test-latest
+
+      - name: 'Push docker image'
+        if: ${{ steps.registry.outputs.exists  == 'false' }}
+        run: |
+          docker push ${{ vars.AZURE_CR_URI }}/$IMAGE_NAME --all-tags
+
+  deploy-test:
+    needs: build
+    name: 'Deploy to Test'
+    runs-on: ubuntu-latest
+    environment: Development
+    steps:
+      - name: 'Azure Login via OIDC'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: 'Deploy docker image to Azure App Service'
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: 'wapp-ot-web-test'
+          images: ${{ vars.AZURE_CR_URI }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy-prod:
+    if: ${{ github.event_name == 'release' }}
+    name: 'Deploy to Prod'
+    needs: [deploy-test]
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get Version
+        id: version
+        uses: revam/gh-action-get-tag-and-version@v1
+        with:
+          tag: ${{ github.ref }}
+          prefix: v
+          prefixRegex: '[v]?'
+
+      - name: 'Azure Login via OIDC'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: 'Login to ACR'
+        run: az acr login -n olavstoppendockerregistry
+
+      - name: 'Fail if image does not exist in registry'
+        run: |
+          if [ -n "$(docker images -q ${{ vars.AZURE_CR_URI }}/$IMAGE_NAME:${{ github.sha }})" ]; then
+            run: exit 1
+          fi
+
+      - name: 'Tag image'
+        run: |
+          docker pull ${{ vars.AZURE_CR_URI }}/$IMAGE_NAME:${{ github.sha }}
+
+          docker tag \
+            ${{ vars.AZURE_CR_URI }}/$IMAGE_NAME:${{ github.sha }} \
+            ${{ vars.AZURE_CR_URI }}/$IMAGE_NAME:${{ steps.version.outputs.version_short }}
+
+          docker tag \
+            ${{ vars.AZURE_CR_URI }}/$IMAGE_NAME:${{ github.sha }} \
+            ${{ vars.AZURE_CR_URI }}/$IMAGE_NAME:prod-latest
+
+      - name: 'Push tags'
+        run: |
+          docker push ${{ vars.AZURE_CR_URI }}/$IMAGE_NAME --all-tags
+
+      - name: 'Deploy docker image to Azure App Service'
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: '${{ env.AZURE_WEBAPP_NAME }}-prod'
+          images: ${{ vars.AZURE_CR_URI }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version_short }}

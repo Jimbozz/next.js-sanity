@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Standard paragraph size for main body text */
+.text-base {
+  @apply text-lg leading-[inherit] md:text-[32px];
+}
+
+/* Paragraph/title sizes for hero sections at the top of pages. */
+.hero-title {
+  @apply text-2xl md:text-[40px];
+}
+
+/* Headings that accompany paragraphs */
+.heading-base {
+  @apply text-2xl md:text-[32px];
+}
+
+/* Heading for accordion */
+.accordion-heading {
+  @apply text-2xl md:text-5xl;
+}
+
+/* Heading for card titles */
+.card-title {
+  @apply text-base font-light md:text-xl lg:text-[32px];
+}
+
+/* Large heading for prominent numbers */
+.large-number {
+  @apply text-4xl leading-none md:text-[80px];
+}
+
+/* Card tags text size */
+.tag-text {
+  @apply text-xs md:text-sm;
+}

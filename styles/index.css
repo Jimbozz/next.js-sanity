@@ -1,0 +1,19 @@
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+ol,
+ul {
+  margin-left: 1rem;
+}
+
+li {
+  list-style-position: inside; /* This makes the bullet appear inside the padding */
+  /* Add padding to the left of the li for spacing */
+}
+
+ol {
+  list-style-type: disc;
+}
