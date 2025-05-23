@@ -1,6 +1,6 @@
-# Olavstoppen Website<!-- omit in toc -->
+# Description
 
-This repository contains the source code for Olavstoppen’s website, developed to reflect our updated brand platform and vision. The site serves as a dynamic platform to share our stories and showcase collaborative projects with clients. To manage content efficiently and allow non-developers to contribute without code modifications, we’ve integrated Sanity CMS. We chose Sanity for its customizable content schemas, user-friendly interface, real-time collaboration features, powerful API integration, and scalability to meet our growing content demands. This setup ensures consistent branding, centralized content management, and the ability to reuse content across multiple platforms.
+Next.js frontend connecting to Sanity CMS.
 
 **Technologies:**
 
@@ -15,7 +15,7 @@ Follow these steps to get started developing!
 
 1. Clone the project from GitHub.
 
-2. Make a copy of `.env.local.example` and rename it to `.env.local`. Fill it with secrets and keys from the shared Keeper folder. Ask the manager or other contributors for access to the folder.
+2. Make a copy of `.env.local.example` and rename it to `.env.local`.
 
 3. Install dependencies with `npm install`.
 
